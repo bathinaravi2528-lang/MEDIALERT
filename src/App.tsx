@@ -16,7 +16,8 @@ import {
   Sparkles,
   Building,
   Info,
-  HeartHandshake
+  HeartHandshake,
+  Bell
 } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { useApp } from './contexts/AppContext';
@@ -28,7 +29,7 @@ import Logo from './components/Logo';
 import Toast from './components/Toast';
 import Badge from './components/Badge';
 import { getDaysLeft, getExpiryStatus, formatDate, generateTransactionId } from './utils/helpers';
-import { Medicine, Order } from './types';
+import { Medicine, Order, Notification } from './types';
 
 export default function App() {
   const { user, isAuthenticated, login, logout, register } = useAuth();
@@ -42,9 +43,43 @@ export default function App() {
   } = useApp();
 
   // Local state for interactive features
-  const [localMedicinesList, setLocalMedicinesList] = useState<Medicine[]>(contextMedicines);
-  const [localOrdersList, setLocalOrdersList] = useState<Order[]>(initialOrders);
+  const [localMedicinesList, setLocalMedicinesList] = useState<Medicine[]>(() => {
+    const stored = localStorage.getItem('medicycle_medicines');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error('Failed to parse local medicines', e);
+      }
+    }
+    return contextMedicines;
+  });
+  const [localOrdersList, setLocalOrdersList] = useState<Order[]>(() => {
+    const stored = localStorage.getItem('medicycle_orders');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error('Failed to parse local orders', e);
+      }
+    }
+    return initialOrders;
+  });
   const [activeTab, setActiveTab] = useState<'browse' | 'list' | 'hospitals' | 'orders' | 'impact'>('browse');
+
+  // Notifications state
+  const [notifications, setNotifications] = useState<Notification[]>(() => {
+    const stored = localStorage.getItem('medicycle_notifications');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error('Failed to parse local notifications', e);
+      }
+    }
+    return [];
+  });
+  const [showNotifDropdown, setShowNotifDropdown] = useState<boolean>(false);
 
   // Browse filtering state
   const [filterType, setFilterType] = useState<'all' | 'exchange' | 'donate' | 'sell'>('all');
@@ -96,10 +131,18 @@ export default function App() {
     }
   }, [user]);
 
-  // Sync initial context medicines to local state
+  // Persist state to LocalStorage
   useEffect(() => {
-    setLocalMedicinesList(contextMedicines);
-  }, [contextMedicines]);
+    localStorage.setItem('medicycle_medicines', JSON.stringify(localMedicinesList));
+  }, [localMedicinesList]);
+
+  useEffect(() => {
+    localStorage.setItem('medicycle_orders', JSON.stringify(localOrdersList));
+  }, [localOrdersList]);
+
+  useEffect(() => {
+    localStorage.setItem('medicycle_notifications', JSON.stringify(notifications));
+  }, [notifications]);
 
   // Handle Login submission
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -227,6 +270,18 @@ export default function App() {
 
     setLocalMedicinesList(updatedMeds);
     setLocalOrdersList([newOrder, ...localOrdersList]);
+
+    // Generate notification for the seller
+    const newNotification: Notification = {
+      id: 'notif_' + Date.now(),
+      recipientName: transactionMedicine.listedBy,
+      message: `${user?.name || 'A user'} requested ${transactionQty}x ${transactionMedicine.name} (${transactionMedicine.type === 'sell' ? 'Purchase' : transactionMedicine.type === 'donate' ? 'Donation' : 'Exchange'}).`,
+      date: formatDate(new Date().toISOString().split('T')[0]),
+      read: false,
+      type: 'success'
+    };
+    setNotifications([newNotification, ...notifications]);
+
     setTransactionMedicine(null);
     showToast(`Order placed for ${transactionQty}x ${transactionMedicine.name}!`, 'success');
     setActiveTab('orders');
@@ -305,6 +360,10 @@ export default function App() {
 
     return matchesLocation && matchesSearch && matchesType && matchesStatus && matchesCategory;
   });
+
+  // Notifications logic
+  const userNotifications = user ? notifications.filter(n => n.recipientName === user.name) : [];
+  const unreadCount = userNotifications.filter(n => !n.read).length;
 
   return (
     <div className="min-h-screen gradient-bg flex flex-col font-inter">
@@ -416,6 +475,75 @@ export default function App() {
                   ))}
                 </select>
               </div>
+
+              {/* Notification Bell */}
+              {isAuthenticated && user && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+                    className="p-2 text-slate-500 hover:text-emerald-600 transition-colors rounded-xl hover:bg-slate-100 relative"
+                    title="Notifications"
+                    aria-label="View notifications"
+                  >
+                    <Bell className="w-5 h-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 text-white font-bold text-[9px] flex items-center justify-center animate-pulse">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Dropdown menu */}
+                  {showNotifDropdown && (
+                    <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 p-4 animate-scale-up">
+                      <div className="flex items-center justify-between border-b border-slate-50 pb-2 mb-3">
+                        <span className="font-bold text-slate-800 text-sm">Notifications</span>
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={() => {
+                              const updated = notifications.map(n => 
+                                n.recipientName === user.name ? { ...n, read: true } : n
+                              );
+                              setNotifications(updated);
+                            }}
+                            className="text-[11px] text-emerald-600 font-bold hover:text-emerald-700"
+                          >
+                            Mark all as read
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                        {userNotifications.length > 0 ? (
+                          userNotifications.map((n) => (
+                            <div
+                              key={n.id}
+                              onClick={() => {
+                                const updated = notifications.map(notif => 
+                                  notif.id === n.id ? { ...notif, read: true } : notif
+                                );
+                                setNotifications(updated);
+                              }}
+                              className={`p-2.5 rounded-xl border text-xs cursor-pointer text-left transition-all ${
+                                n.read 
+                                  ? 'bg-slate-50/50 border-slate-100 text-slate-500' 
+                                  : 'bg-emerald-50/20 border-emerald-100 text-slate-800 font-medium'
+                              }`}
+                            >
+                              <p className="leading-normal">{n.message}</p>
+                              <p className="text-[10px] text-slate-400 mt-1">{n.date}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-6 text-slate-400 text-xs">
+                            No notifications yet
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* User Profile / Login */}
               {isAuthenticated && user ? (

@@ -66,3 +66,12 @@ export type NavItem = {
   icon: string;
   path: string;
 };
+
+export interface Notification {
+  id: string;
+  recipientName: string;
+  message: string;
+  date: string;
+  read: boolean;
+  type: 'info' | 'success' | 'warning';
+}
