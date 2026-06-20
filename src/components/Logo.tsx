@@ -43,10 +43,10 @@ export default function Logo({ size = 'md', variant = 'dark' }: LogoProps) {
       {/* Text */}
       <div>
         <div className={`font-poppins font-bold ${s.text} ${textColor} leading-tight`}>
-          MediCycle
+          MEDIALERT
         </div>
         <div className={`font-inter font-medium ${s.sub} ${subColor} leading-tight`}>
-          Connect · Vizag
+          Vizag
         </div>
       </div>
     </div>

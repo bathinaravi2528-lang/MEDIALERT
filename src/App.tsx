@@ -17,7 +17,11 @@ import {
   Building,
   Info,
   HeartHandshake,
-  Bell
+  Bell,
+  Lock,
+  Mail,
+  User,
+  ArrowLeft
 } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { useApp } from './contexts/AppContext';
@@ -32,7 +36,7 @@ import { getDaysLeft, getExpiryStatus, formatDate, generateTransactionId } from 
 import { Medicine, Order, Notification } from './types';
 
 export default function App() {
-  const { user, isAuthenticated, login, logout, register } = useAuth();
+  const { user, isAuthenticated, login, logout, register, resetPassword } = useAuth();
   const {
     medicines: contextMedicines,
     selectedLocation,
@@ -93,13 +97,12 @@ export default function App() {
   const [deliveryAddress, setDeliveryAddress] = useState<string>('');
 
   // Login form state
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
   const [usernameInput, setUsernameInput] = useState<string>('MedUser');
   const [passwordInput, setPasswordInput] = useState<string>('123456');
   const [loginError, setLoginError] = useState<string>('');
 
   // Registration form state
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot_password'>('login');
   const [regName, setRegName] = useState<string>('');
   const [regEmail, setRegEmail] = useState<string>('');
   const [regMobile, setRegMobile] = useState<string>('');
@@ -108,6 +111,13 @@ export default function App() {
   const [regUsername, setRegUsername] = useState<string>('');
   const [regPassword, setRegPassword] = useState<string>('');
   const [regConfirmPassword, setRegConfirmPassword] = useState<string>('');
+
+  // Forgot password form state
+  const [forgotUsernameOrEmail, setForgotUsernameOrEmail] = useState<string>('');
+  const [forgotNewPassword, setForgotNewPassword] = useState<string>('');
+  const [forgotConfirmNewPassword, setForgotConfirmNewPassword] = useState<string>('');
+  const [forgotError, setForgotError] = useState<string>('');
+  const [forgotSuccess, setForgotSuccess] = useState<string>('');
 
   // Listing Form state
   const [formName, setFormName] = useState<string>('');
@@ -151,7 +161,6 @@ export default function App() {
     const success = login(usernameInput, passwordInput);
     if (success) {
       showToast(`Welcome back, ${usernameInput}!`, 'success');
-      setShowLoginModal(false);
       // Clean inputs
       setPasswordInput('');
     } else {
@@ -207,10 +216,49 @@ export default function App() {
     }
   };
 
+  // Handle Forgot Password submission
+  const handleForgotPasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotSuccess('');
+
+    if (!forgotUsernameOrEmail.trim()) {
+      setForgotError('Please enter your username or email.');
+      return;
+    }
+
+    if (forgotNewPassword.length < 6) {
+      setForgotError('Password must be at least 6 characters.');
+      return;
+    }
+
+    if (forgotNewPassword !== forgotConfirmNewPassword) {
+      setForgotError('Passwords do not match.');
+      return;
+    }
+
+    const res = resetPassword(forgotUsernameOrEmail.trim(), forgotNewPassword);
+    if (res.success) {
+      setForgotSuccess('Password reset successfully! Redirecting to login...');
+      showToast('Password reset successful', 'success');
+      // Clear inputs
+      setForgotUsernameOrEmail('');
+      setForgotNewPassword('');
+      setForgotConfirmNewPassword('');
+      // Auto switch back to login after 3 seconds
+      setTimeout(() => {
+        setAuthMode('login');
+        setForgotSuccess('');
+      }, 3000);
+    } else {
+      setForgotError(res.message);
+      showToast(res.message, 'error');
+    }
+  };
+
   // Restrict actions if not logged in
   const requireAuthAction = (action: () => void) => {
     if (!isAuthenticated) {
-      setShowLoginModal(true);
       showToast('Please sign in to continue', 'info');
     } else {
       action();
@@ -257,7 +305,8 @@ export default function App() {
       estimatedDelivery: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 3 days from now
       address: deliveryAddress || 'Visakhapatnam Local Pickup',
       amount: priceAmount,
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      userId: user?.id || 'u1'
     };
 
     // Update medicines list (decrease quantity or remove if empty)
@@ -364,6 +413,390 @@ export default function App() {
   // Notifications logic
   const userNotifications = user ? notifications.filter(n => n.recipientName === user.name) : [];
   const unreadCount = userNotifications.filter(n => !n.read).length;
+
+  // Filter transactions to only show the logged-in user's transaction history
+  const userOrders = isAuthenticated ? localOrdersList.filter(ord => ord.userId === user?.id) : [];
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen grid grid-cols-1 lg:grid-cols-12 font-inter bg-slate-950 text-slate-100 overflow-x-hidden">
+        {/* Left Side: Brand Promo (hidden on mobile) */}
+        <div className="hidden lg:flex lg:col-span-5 relative flex-col justify-between p-12 overflow-hidden bg-gradient-to-br from-emerald-900 via-slate-900 to-emerald-950 border-r border-slate-800">
+          {/* Radial glow background */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(16,185,129,0.15),transparent_50%)]" />
+          
+          <div className="relative z-10 flex-shrink-0">
+            <Logo size="lg" variant="light" />
+          </div>
+
+          <div className="relative z-10 my-auto space-y-6 max-w-md text-left">
+            <div className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1 text-xs font-semibold text-emerald-400 animate-pulse">
+              <Sparkles className="w-3.5 h-3.5" />
+              Vizag's Safe Medicine Sharing Portal
+            </div>
+            <h1 className="text-3xl font-extrabold tracking-tight leading-tight text-white font-poppins">
+              Save Costs. <br />
+              Prevent Bio-Waste. <br />
+              Support Your Community.
+            </h1>
+            <p className="text-slate-400 text-sm leading-relaxed">
+              MEDIALERT connects households in Visakhapatnam to share near-expiry sealed medicines. Join our voluntary peer network to exchange formulations safely.
+            </p>
+
+            {/* Micro Stats */}
+            <div className="grid grid-cols-2 gap-4 pt-6 border-t border-slate-800">
+              <div>
+                <p className="text-2xl font-bold text-white">4.8 Tons</p>
+                <p className="text-xs text-slate-400">Waste Prevented</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-white">2.4k+</p>
+                <p className="text-xs text-slate-400">Medicines Shared</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative z-10 flex-shrink-0 text-slate-500 text-xs font-medium text-left">
+            © 2026 MEDIALERT Visakhapatnam. All rights reserved.
+          </div>
+        </div>
+
+        {/* Right Side: Auth Forms Card */}
+        <div className="lg:col-span-7 flex flex-col justify-center items-center p-6 sm:p-12 relative min-h-screen w-full bg-slate-950">
+          {/* Mobile-only header logo */}
+          <div className="lg:hidden mb-8 self-start">
+            <Logo size="md" variant="light" />
+          </div>
+
+          <div className="w-full max-w-md bg-slate-900/40 border border-slate-800 backdrop-blur-md rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden transition-all duration-300">
+            {/* Soft decorative light */}
+            <div className="absolute -top-20 -right-20 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Tabs / Heading */}
+            <div className="mb-6 text-left">
+              <h2 className="font-poppins font-bold text-2xl text-white">
+                {authMode === 'login' && "Welcome Back"}
+                {authMode === 'register' && "Join the Network"}
+                {authMode === 'forgot_password' && "Reset Password"}
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                {authMode === 'login' && "Sign in to access Vizag's medicine exchange portal"}
+                {authMode === 'register' && "Create an account to start listing and requesting"}
+                {authMode === 'forgot_password' && "Provide details to restore your password credentials"}
+              </p>
+            </div>
+
+            {/* Error alerts */}
+            {authMode === 'login' && loginError && (
+              <div className="bg-red-950/40 border border-red-900/60 text-red-300 text-xs p-3.5 rounded-2xl flex items-center gap-2 mb-4 animate-slide-in text-left">
+                <AlertTriangle className="w-4.5 h-4.5 flex-shrink-0" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            {authMode === 'register' && loginError && (
+              <div className="bg-red-950/40 border border-red-900/60 text-red-300 text-xs p-3.5 rounded-2xl flex items-center gap-2 mb-4 animate-slide-in text-left">
+                <AlertTriangle className="w-4.5 h-4.5 flex-shrink-0" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            {authMode === 'forgot_password' && forgotError && (
+              <div className="bg-red-950/40 border border-red-900/60 text-red-300 text-xs p-3.5 rounded-2xl flex items-center gap-2 mb-4 animate-slide-in text-left">
+                <AlertTriangle className="w-4.5 h-4.5 flex-shrink-0" />
+                <span>{forgotError}</span>
+              </div>
+            )}
+
+            {authMode === 'forgot_password' && forgotSuccess && (
+              <div className="bg-emerald-950/40 border border-emerald-900/60 text-emerald-300 text-xs p-3.5 rounded-2xl flex items-center gap-2 mb-4 animate-slide-in text-left">
+                <Sparkles className="w-4 h-4 flex-shrink-0" />
+                <span>{forgotSuccess}</span>
+              </div>
+            )}
+
+            {/* MODES */}
+            {authMode === 'login' && (
+              <form onSubmit={handleLoginSubmit} className="space-y-4 text-left">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-350">Username</label>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      placeholder="Enter username"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-semibold text-slate-350">Password</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('forgot_password');
+                        setLoginError('');
+                        setForgotError('');
+                        setForgotSuccess('');
+                      }}
+                      className="text-xs text-emerald-400 hover:text-emerald-350 font-semibold bg-transparent border-0 cursor-pointer"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
+                    <input
+                      type="password"
+                      required
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                      placeholder="Enter password"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Pre-fill credentials helper */}
+                <div className="bg-slate-900/60 border border-slate-800 p-3 rounded-2xl text-[11px] text-slate-400 space-y-1 leading-relaxed">
+                  <p className="font-bold text-slate-300">💡 Demo Credentials:</p>
+                  <p>Username: <code className="bg-slate-950 border border-slate-800 px-1 py-0.5 rounded font-bold text-emerald-400">MedUser</code></p>
+                  <p>Password: <code className="bg-slate-950 border border-slate-800 px-1 py-0.5 rounded font-bold text-emerald-400">123456</code></p>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-md shadow-emerald-500/10"
+                >
+                  Sign In
+                </button>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('register');
+                      setLoginError('');
+                    }}
+                    className="text-xs text-emerald-450 hover:text-emerald-400 font-bold transition-all bg-transparent border-0 cursor-pointer"
+                  >
+                    Don't have an account? Register here
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {authMode === 'register' && (
+              <form onSubmit={handleRegisterSubmit} className="space-y-4 max-h-[60vh] overflow-y-auto pr-1 text-left">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-350">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      placeholder="e.g. Ravi Kumar"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-350">Username *</label>
+                    <input
+                      type="text"
+                      required
+                      value={regUsername}
+                      onChange={(e) => setRegUsername(e.target.value)}
+                      placeholder="Choose username"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-350">Email Address *</label>
+                    <input
+                      type="email"
+                      required
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="email@example.com"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-350">Mobile Number *</label>
+                    <input
+                      type="text"
+                      required
+                      value={regMobile}
+                      onChange={(e) => setRegMobile(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-350">Locality in Vizag *</label>
+                  <select
+                    value={regLocation}
+                    onChange={(e) => setRegLocation(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  >
+                    {vizagLocations.map((loc) => (
+                      <option key={loc} value={loc} className="bg-slate-900 text-slate-100">
+                        {loc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-350">Detailed Address *</label>
+                  <textarea
+                    required
+                    rows={2}
+                    value={regAddress}
+                    onChange={(e) => setRegAddress(e.target.value)}
+                    placeholder="e.g. House No, Building, Street..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-350">Password *</label>
+                    <input
+                      type="password"
+                      required
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Min 6 chars"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-350">Confirm Password *</label>
+                    <input
+                      type="password"
+                      required
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      placeholder="Re-enter password"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-md shadow-emerald-500/10 mt-2"
+                >
+                  Register & Sign Up
+                </button>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('login');
+                      setLoginError('');
+                    }}
+                    className="text-xs text-emerald-450 hover:text-emerald-400 font-bold transition-all bg-transparent border-0 cursor-pointer"
+                  >
+                    Already have an account? Sign In
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {authMode === 'forgot_password' && (
+              <form onSubmit={handleForgotPasswordSubmit} className="space-y-4 text-left">
+                <div className="space-y-1 bg-slate-900/50 border border-slate-800/40 p-3 rounded-2xl text-[11px] text-slate-400 leading-normal mb-2">
+                  <p className="text-slate-300 font-bold mb-0.5">ℹ️ Resetting Account Password</p>
+                  Input your registered username or email to verify, then specify your new password. This works for both newly registered accounts and the default demo account (<code className="text-emerald-400">MedUser</code>).
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-350">Username or Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      value={forgotUsernameOrEmail}
+                      onChange={(e) => setForgotUsernameOrEmail(e.target.value)}
+                      placeholder="Enter username or email"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-350">New Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
+                    <input
+                      type="password"
+                      required
+                      value={forgotNewPassword}
+                      onChange={(e) => setForgotNewPassword(e.target.value)}
+                      placeholder="Min 6 characters"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-350">Confirm New Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
+                    <input
+                      type="password"
+                      required
+                      value={forgotConfirmNewPassword}
+                      onChange={(e) => setForgotConfirmNewPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-150 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-md shadow-emerald-500/10"
+                >
+                  Reset Password
+                </button>
+
+                <div className="text-center pt-2 flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('login');
+                      setForgotError('');
+                      setForgotSuccess('');
+                    }}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-all font-semibold bg-transparent border-0 cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    Back to Sign In
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen gradient-bg flex flex-col font-inter">
@@ -570,7 +1003,7 @@ export default function App() {
                 </div>
               ) : (
                 <button
-                  onClick={() => setShowLoginModal(true)}
+                  onClick={() => {}}
                   className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-200 shadow-md hover:shadow-emerald-500/10"
                   aria-label="Sign In"
                 >
@@ -1075,7 +1508,7 @@ export default function App() {
                 <div className="space-y-1">
                   <h3 className="font-poppins font-bold text-red-900 text-lg">Medical Emergency?</h3>
                   <p className="text-sm text-red-700 max-w-xl">
-                    MediCycle is strictly a medicine sharing network. For medical urgencies, contact Vizag Local EMS or visit the nearest 24/7 Emergency Room immediately.
+                    MEDIALERT is strictly a medicine sharing network. For medical urgencies, contact Vizag Local EMS or visit the nearest 24/7 Emergency Room immediately.
                   </p>
                 </div>
               </div>
@@ -1097,7 +1530,7 @@ export default function App() {
               <p className="text-sm text-slate-500 mt-1">Track the status of requested, exchanged, or purchased medicines.</p>
             </div>
 
-            {localOrdersList.length > 0 ? (
+            {userOrders.length > 0 ? (
               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
@@ -1112,7 +1545,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                      {localOrdersList.map((ord) => (
+                      {userOrders.map((ord) => (
                         <tr key={ord.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 font-bold text-slate-950">{ord.id}</td>
                           <td className="px-6 py-4 font-semibold text-slate-800">{ord.medicineName}</td>
@@ -1438,226 +1871,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 3: LOGIN / REGISTER MODAL */}
-      {showLoginModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className={`bg-white w-full ${authMode === 'register' ? 'max-w-md' : 'max-w-sm'} rounded-3xl overflow-hidden shadow-2xl animate-scale-up text-left my-8 transition-all duration-300`}>
-            <div className="p-6 space-y-6">
-              {/* Header */}
-              <div className="flex justify-between items-start gap-4">
-                <div>
-                  <h3 className="font-poppins font-bold text-slate-950 text-lg">
-                    {authMode === 'login' ? 'Sign In to MediCycle' : 'Create an Account'}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {authMode === 'login' ? 'Access listing and requesting privileges' : 'Join the Vizag medicine sharing network'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowLoginModal(false);
-                    setLoginError('');
-                    setAuthMode('login');
-                  }}
-                  className="p-1 rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-all"
-                  aria-label="Close dialog"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Login/Register error display */}
-              {loginError && (
-                <div className="bg-red-50 text-red-600 text-xs p-3.5 rounded-2xl flex items-center gap-2 border border-red-200 animate-slide-in">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                  <span>{loginError}</span>
-                </div>
-              )}
-
-              {authMode === 'login' ? (
-                /* Form */
-                <form onSubmit={handleLoginSubmit} className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Username</label>
-                    <input
-                      type="text"
-                      required
-                      value={usernameInput}
-                      onChange={(e) => setUsernameInput(e.target.value)}
-                      placeholder="Enter username"
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Password</label>
-                    <input
-                      type="password"
-                      required
-                      value={passwordInput}
-                      onChange={(e) => setPasswordInput(e.target.value)}
-                      placeholder="Enter password"
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                  </div>
-
-                  {/* Pre-fill credentials helper */}
-                  <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl text-[11px] text-slate-500 space-y-1 font-medium leading-relaxed">
-                    <p className="font-bold text-slate-600">💡 Demo Credentials:</p>
-                    <p>Username: <code className="bg-white border px-1 py-0.5 rounded font-bold">MedUser</code></p>
-                    <p>Password: <code className="bg-white border px-1 py-0.5 rounded font-bold">123456</code></p>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-md shadow-emerald-500/10"
-                  >
-                    Sign In
-                  </button>
-
-                  <div className="text-center pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAuthMode('register');
-                        setLoginError('');
-                      }}
-                      className="text-xs text-emerald-600 hover:text-emerald-700 font-bold transition-all"
-                    >
-                      Don't have an account? Register here
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                /* Registration Form */
-                <form onSubmit={handleRegisterSubmit} className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-700">Full Name *</label>
-                      <input
-                        type="text"
-                        required
-                        value={regName}
-                        onChange={(e) => setRegName(e.target.value)}
-                        placeholder="e.g. Ravi Kumar"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-700">Username *</label>
-                      <input
-                        type="text"
-                        required
-                        value={regUsername}
-                        onChange={(e) => setRegUsername(e.target.value)}
-                        placeholder="Choose username"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-700">Email Address *</label>
-                      <input
-                        type="email"
-                        required
-                        value={regEmail}
-                        onChange={(e) => setRegEmail(e.target.value)}
-                        placeholder="email@example.com"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-700">Mobile Number *</label>
-                      <input
-                        type="text"
-                        required
-                        value={regMobile}
-                        onChange={(e) => setRegMobile(e.target.value)}
-                        placeholder="+91 98765 43210"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Locality in Vizag *</label>
-                    <select
-                      value={regLocation}
-                      onChange={(e) => setRegLocation(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
-                    >
-                      {vizagLocations.map((loc) => (
-                        <option key={loc} value={loc}>
-                          {loc}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Detailed Address *</label>
-                    <textarea
-                      required
-                      rows={2}
-                      value={regAddress}
-                      onChange={(e) => setRegAddress(e.target.value)}
-                      placeholder="e.g. House No, Building, Street..."
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-700">Password *</label>
-                      <input
-                        type="password"
-                        required
-                        value={regPassword}
-                        onChange={(e) => setRegPassword(e.target.value)}
-                        placeholder="Min 6 chars"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-700">Confirm Password *</label>
-                      <input
-                        type="password"
-                        required
-                        value={regConfirmPassword}
-                        onChange={(e) => setRegConfirmPassword(e.target.value)}
-                        placeholder="Re-enter password"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-md shadow-emerald-500/10 mt-2"
-                  >
-                    Register & Sign Up
-                  </button>
-
-                  <div className="text-center pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAuthMode('login');
-                        setLoginError('');
-                      }}
-                      className="text-xs text-emerald-600 hover:text-emerald-700 font-bold transition-all"
-                    >
-                      Already have an account? Sign In
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

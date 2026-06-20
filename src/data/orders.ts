@@ -10,6 +10,7 @@ export const orders: Order[] = [
     address: 'Flat 4B, Sri Ram Apartments, MVP Colony, Visakhapatnam - 530017',
     amount: 0,
     date: '2026-06-08',
+    userId: 'u1',
   },
   {
     id: 'ORD002',
@@ -20,6 +21,7 @@ export const orders: Order[] = [
     address: 'H.No 45, Nehru Nagar, Dwaraka Nagar, Visakhapatnam - 530016',
     amount: 25,
     date: '2026-06-11',
+    userId: 'u1',
   },
   {
     id: 'ORD003',
@@ -30,6 +32,7 @@ export const orders: Order[] = [
     address: '12-3-45, Steel Plant Area, Gajuwaka, Visakhapatnam - 530026',
     amount: 120,
     date: '2026-06-11',
+    userId: 'u1',
   },
   {
     id: 'ORD004',
@@ -40,5 +43,6 @@ export const orders: Order[] = [
     address: '7th Lane, Madhurawada, Visakhapatnam - 530048',
     amount: 45,
     date: '2026-06-11',
+    userId: 'u1',
   },
 ];

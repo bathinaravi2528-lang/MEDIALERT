@@ -8,6 +8,7 @@ interface AuthContextType {
   logout: () => void;
   updateUser: (updates: Partial<User>) => void;
   register: (newUser: Omit<User, 'id'> & { password?: string }) => { success: boolean; message: string };
+  resetPassword: (usernameOrEmail: string, newPassword: string) => { success: boolean; message: string };
 }
 
 interface RegisteredUser extends User {
@@ -41,8 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return [];
   });
 
+  const [demoPassword, setDemoPassword] = useState<string>(() => {
+    return localStorage.getItem('medicycle_demo_password') || '123456';
+  });
+
   const login = (username: string, password: string): boolean => {
-    if (username === 'MedUser' && password === '123456') {
+    if (username.toLowerCase() === 'meduser' && password === demoPassword) {
       setUser(DEMO_USER);
       return true;
     }
@@ -57,6 +62,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     return false;
+  };
+
+  const resetPassword = (usernameOrEmail: string, newPassword: string): { success: boolean; message: string } => {
+    const term = usernameOrEmail.toLowerCase();
+    
+    // Check if it's the demo user
+    if (term === 'meduser' || term === DEMO_USER.email.toLowerCase()) {
+      setDemoPassword(newPassword);
+      localStorage.setItem('medicycle_demo_password', newPassword);
+      return { success: true, message: 'Password reset successful for Demo User!' };
+    }
+
+    // Find in registered users
+    const index = registeredUsers.findIndex(
+      u => u.username.toLowerCase() === term || u.email.toLowerCase() === term
+    );
+    
+    if (index !== -1) {
+      const updatedList = [...registeredUsers];
+      updatedList[index] = { ...updatedList[index], password: newPassword };
+      setRegisteredUsers(updatedList);
+      localStorage.setItem('medicycle_users', JSON.stringify(updatedList));
+      return { success: true, message: 'Password reset successful!' };
+    }
+
+    return { success: false, message: 'User not found with that username or email.' };
   };
 
   const logout = () => {
@@ -101,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout, updateUser, register }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout, updateUser, register, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

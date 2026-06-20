@@ -48,6 +48,7 @@ export interface Order {
   address: string;
   amount: number;
   date: string;
+  userId: string;
 }
 
 export interface Payment {
