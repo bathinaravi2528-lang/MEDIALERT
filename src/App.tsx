@@ -307,7 +307,7 @@ export default function App() {
       currency: 'INR',
       name: 'MEDIALERT',
       description: `Payment for ${transactionQty}x ${transactionMedicine.name}`,
-      handler: function (response: any) {
+      handler: function () {
         setShowPaymentModal(false);
         processFinalTransaction();
       },
@@ -321,7 +321,7 @@ export default function App() {
       },
     };
     const rzp = new (window as any).Razorpay(options);
-    rzp.on('payment.failed', function (response: any) {
+    rzp.on('payment.failed', function () {
       showToast('Payment failed. Please try again.', 'error');
     });
     rzp.open();
