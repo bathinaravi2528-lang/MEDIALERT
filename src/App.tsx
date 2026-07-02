@@ -21,7 +21,9 @@ import {
   Lock,
   Mail,
   User,
-  ArrowLeft
+  ArrowLeft,
+  CreditCard,
+  QrCode
 } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { useApp } from './contexts/AppContext';
@@ -95,6 +97,8 @@ export default function App() {
   const [transactionMedicine, setTransactionMedicine] = useState<Medicine | null>(null);
   const [transactionQty, setTransactionQty] = useState<number>(1);
   const [deliveryAddress, setDeliveryAddress] = useState<string>('');
+  const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
+  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'upi' | 'card'>('razorpay');
 
   // Login form state
   const [usernameInput, setUsernameInput] = useState<string>('MedUser');
@@ -283,6 +287,53 @@ export default function App() {
     }
   };
 
+  // Handle Razorpay specifically
+  const handleRazorpayPayment = () => {
+    if (!transactionMedicine) return;
+    const razorpayKey = 'rzp_test_dummykey123456'; 
+      
+    if (razorpayKey.includes('dummy')) {
+      showToast('Simulating Razorpay Payment (Demo Mode)...', 'info');
+      setTimeout(() => {
+        setShowPaymentModal(false);
+        processFinalTransaction();
+      }, 1500);
+      return;
+    }
+
+    const options = {
+      key: razorpayKey,
+      amount: (transactionMedicine.price! * transactionQty * 100).toString(),
+      currency: 'INR',
+      name: 'MEDIALERT',
+      description: `Payment for ${transactionQty}x ${transactionMedicine.name}`,
+      handler: function (response: any) {
+        setShowPaymentModal(false);
+        processFinalTransaction();
+      },
+      prefill: {
+        name: user?.name || '',
+        email: user?.email || '',
+        contact: user?.mobile || '',
+      },
+      theme: {
+        color: '#10B981',
+      },
+    };
+    const rzp = new (window as any).Razorpay(options);
+    rzp.on('payment.failed', function (response: any) {
+      showToast('Payment failed. Please try again.', 'error');
+    });
+    rzp.open();
+  };
+
+  // Process manual fake payment (UPI / Card)
+  const handleManualPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    setShowPaymentModal(false);
+    processFinalTransaction();
+  };
+
   // Complete exchange/buy/donate order
   const handleConfirmTransaction = (e: React.FormEvent) => {
     e.preventDefault();
@@ -292,6 +343,16 @@ export default function App() {
       showToast(`Please enter a quantity between 1 and ${transactionMedicine.quantity}`, 'error');
       return;
     }
+
+    if (transactionMedicine.type === 'sell') {
+      setShowPaymentModal(true);
+    } else {
+      processFinalTransaction();
+    }
+  };
+
+  const processFinalTransaction = () => {
+    if (!transactionMedicine) return;
 
     const priceAmount = transactionMedicine.type === 'sell' && transactionMedicine.price 
       ? transactionMedicine.price * transactionQty 
@@ -332,7 +393,7 @@ export default function App() {
     setNotifications([newNotification, ...notifications]);
 
     setTransactionMedicine(null);
-    showToast(`Order placed for ${transactionQty}x ${transactionMedicine.name}!`, 'success');
+    showToast(transactionMedicine.type === 'sell' ? `Payment successful! Order placed for ${transactionQty}x ${transactionMedicine.name}` : `Order placed for ${transactionQty}x ${transactionMedicine.name}!`, 'success');
     setActiveTab('orders');
   };
 
@@ -1774,6 +1835,133 @@ export default function App() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: PAYMENT OPTIONS */}
+      {showPaymentModal && transactionMedicine && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-scale-up text-left">
+            <div className="bg-slate-900 p-5 text-white flex justify-between items-center">
+              <div>
+                <h3 className="font-poppins font-bold text-base">Select Payment Method</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">Amount to pay: ₹{transactionMedicine.price! * transactionQty}</p>
+              </div>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="text-white hover:text-slate-300 p-1 rounded-lg transition-colors"
+                aria-label="Close payment modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-5">
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('razorpay')}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${paymentMethod === 'razorpay' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500'}`}
+                >
+                  Razorpay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('upi')}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${paymentMethod === 'upi' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500'}`}
+                >
+                  <QrCode className="w-3.5 h-3.5" /> UPI
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('card')}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${paymentMethod === 'card' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500'}`}
+                >
+                  <CreditCard className="w-3.5 h-3.5" /> Card
+                </button>
+              </div>
+
+              {paymentMethod === 'razorpay' && (
+                <div className="text-center py-4 space-y-4">
+                  <div className="text-sm text-slate-600 font-medium">Pay securely with Razorpay checkout</div>
+                  <button
+                    onClick={handleRazorpayPayment}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-md"
+                  >
+                    Pay with Razorpay
+                  </button>
+                </div>
+              )}
+
+              {paymentMethod === 'upi' && (
+                <form onSubmit={handleManualPayment} className="text-center py-2 space-y-4 animate-fade-in">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 inline-block">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=dummy@upi&pn=MEDIALERT&am=${transactionMedicine.price! * transactionQty}`}
+                      alt="UPI QR Code"
+                      className="w-32 h-32 mx-auto mix-blend-multiply"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium">Scan this QR code with any UPI app</p>
+                  <button
+                    type="submit"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-md"
+                  >
+                    I have paid ₹{transactionMedicine.price! * transactionQty}
+                  </button>
+                </form>
+              )}
+
+              {paymentMethod === 'card' && (
+                <form onSubmit={handleManualPayment} className="space-y-4 animate-fade-in">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Card Number</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="1111 2222 3333 4444"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Expiry (MM/YY)</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="12/28"
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">CVV</label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="123"
+                        maxLength={3}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Name on Card</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. John Doe"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-3 rounded-xl transition-all shadow-md mt-2"
+                  >
+                    Pay ₹{transactionMedicine.price! * transactionQty} Securely
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         </div>
